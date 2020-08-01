@@ -1,16 +1,16 @@
+import keras
 import numpy as np
 import tensorflow as tf
 import time
 import scipy.ndimage.filters
+from keras.applications.resnet50 import ResNet50
+from keras.models import Model
 
 # build encoder
 def encoder(opt,image): # [B,H,W,3]
-	def conv2Layer(opt,feat,outDim):
-		weight,bias = createVariable(opt,[3,3,int(feat.shape[-1]),outDim])
-		conv = tf.nn.conv2d(feat,weight,strides=[1,2,2,1],padding="SAME")+bias
-		batchnorm = batchNormalization(opt,conv,type="conv")
-		relu = tf.nn.relu(batchnorm)
-		return relu
+	restnet = ResNet50(include_top=False, weights='imagenet', input_shape=(opt.inH,opt.inW,3))
+	output = restnet.layers[-1].output
+	output = keras.layers.Flatten()(output)
 	def linearLayer(opt,feat,outDim,final=False):
 		weight,bias = createVariable(opt,[int(feat.shape[-1]),outDim])
 		fc = tf.matmul(feat,weight)+bias
@@ -18,14 +18,7 @@ def encoder(opt,image): # [B,H,W,3]
 		relu = tf.nn.relu(batchnorm)
 		return relu if not final else fc
 	with tf.variable_scope("encoder"):
-		feat = image
-		with tf.variable_scope("conv1"): feat = conv2Layer(opt,feat,96) # 32x32
-		with tf.variable_scope("conv2"): feat = conv2Layer(opt,feat,128) # 16x16
-		with tf.variable_scope("conv3"): feat = conv2Layer(opt,feat,192) # 8x8
-		with tf.variable_scope("conv4"): feat = conv2Layer(opt,feat,256) # 4x4
-		feat = tf.reshape(feat,[opt.batchSize,-1])
-		with tf.variable_scope("fc1"): feat = linearLayer(opt,feat,2048)
-		with tf.variable_scope("fc2"): feat = linearLayer(opt,feat,1024)
+		feat = output
 		with tf.variable_scope("fc3"): feat = linearLayer(opt,feat,512,final=True)
 		latent = feat
 	return latent
